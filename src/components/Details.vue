@@ -12,7 +12,7 @@ const items = ref(
   <Page actionBarHidden="true">
     <GridLayout rows="auto, *">
       <Label
-        text="返回"
+        text="Go Back"
         @tap="$navigateBack"
         class="text-center px-4 py-10 text-2xl text-gray-900 font-bold"
       />
