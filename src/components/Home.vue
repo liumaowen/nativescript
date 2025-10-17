@@ -35,8 +35,8 @@ onUnmounted(() => {
       <ActionBar>
         <Label text="首页" class="font-bold text-lg" />
       </ActionBar>
-      <TabView>
-        <TabViewItem title="First">
+      <TabView androidTabsPosition="bottom">
+        <TabViewItem title="首页">
           <GridLayout rows="*, auto, auto, *" class="px-4">
             <Label row="1" class="text-xl align-middle text-center text-gray-500" :text="message" @tap="logMessage" />
 
