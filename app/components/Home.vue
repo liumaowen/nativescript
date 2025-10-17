@@ -1,43 +1,72 @@
 <template>
   <Page>
     <ActionBar>
-      <Label text="Home"/>
+      <Label text="Home" />
     </ActionBar>
+    <TabView androidTabsPosition="bottom">
+      <TabViewItem title="首页">
+        <GridLayout rows="*, auto, auto, *" class="px-4">
+          <Label row="1" class="text-xl align-middle text-center text-gray-500" :text="message" @tap="logMessage" />
 
-    <GridLayout>
-      <Label class="info">
-        <FormattedString>
-          <Span class="fas" text.decode="&#xf135; "/>
-          <Span :text="message"/>
-        </FormattedString>
-      </Label>
-    </GridLayout>
+          <Button row="2" @tap="$navigateTo(Details)"
+            class="mt-4 px-4 py-2 bg-white border-2 border-blue-400 rounded-lg" horizontalAlignment="center">
+            View Details
+          </Button>
+        </GridLayout>
+      </TabViewItem>
+      <TabViewItem title="Second">
+        <Label text="Second Tab Content" textAlignment="center" verticalAlignment="center"></Label>
+      </TabViewItem>
+      <TabViewItem title="我的">
+        <Label text="Third Tab Content" textAlignment="center" verticalAlignment="center"></Label>
+      </TabViewItem>
+    </TabView>
   </Page>
 </template>
 
-<script lang="ts">
-  import Vue from "nativescript-vue";
+<script setup lang="ts">
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  $navigateTo,
+} from 'nativescript-vue';
 
-  export default Vue.extend({
-    computed: {
-      message() {
-        return "Blank {N}-Vue app";
-      }
-    }
-  });
+import Details from './Details.vue';
+
+const counter = ref(0);
+const message = computed(() => {
+  return `Blank {N}-Vue app: ${counter.value}`;
+});
+
+function logMessage() {
+  console.log('You have tapped the message!');
+}
+
+let interval: any;
+onMounted(() => {
+  console.log('mounted');
+  interval = setInterval(() => counter.value++, 100);
+});
+
+onUnmounted(() => {
+  console.log('unmounted');
+  clearInterval(interval);
+});
 </script>
 
 <style scoped lang="scss">
-  @import '@nativescript/theme/scss/variables/blue';
+@import '@nativescript/theme/scss/variables/blue';
 
-  // Custom styles
-  .fas {
-    @include colorize($color: accent);
-  }
+// Custom styles
+.fas {
+  @include colorize($color: accent);
+}
 
-  .info {
-    font-size: 20;
-    horizontal-align: center;
-    vertical-align: center;
-  }
+.info {
+  font-size: 20;
+  horizontal-align: center;
+  vertical-align: center;
+}
 </style>
