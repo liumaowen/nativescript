@@ -1,5 +1,5 @@
 {
-  "name": "@nativescript-vue/stackblitz-template",
+  "name": "nativescript",
   "main": "src/app.ts",
   "version": "1.0.0",
   "dependencies": {
