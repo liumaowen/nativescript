@@ -1,0 +1,174 @@
+name: Build NativeScript Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'Build Type (debug or release)'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 设置 JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 设置 Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+
+      - name: 缓存 Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.android
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 缓存 npm 依赖
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: 安装 NativeScript CLI
+        run: |
+          npm install -g nativescript
+          ns --version
+
+      - name: 安装项目依赖
+        run: npm install
+
+      - name: 验证 NativeScript 环境
+        run: |
+          ns doctor android
+          ns platform add android
+
+      - name: 创建构建脚本
+        run: |
+          cat > build.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          echo "开始构建 NativeScript 应用..."
+
+          if [ "$1" = "release" ]; then
+            echo "构建 Release 版本"
+            ns build android --release --key-store-path $SIGNING_KEY_STORE_PATH \
+              --key-store-password $SIGNING_STORE_PASSWORD \
+              --key-store-alias $SIGNING_KEY_ALIAS \
+              --key-store-alias-password $SIGNING_KEY_PASSWORD \
+              --copy-to ./app-release.apk
+          else
+            echo "构建 Debug 版本"
+            ns build android --copy-to ./app-debug.apk
+          fi
+
+          echo "构建完成"
+          ls -la *.apk *.aab 2>/dev/null || echo "未找到构建文件"
+          EOF
+
+          chmod +x build.sh
+
+      # 仅在 release 构建时还原 keystore
+      - name: 还原 keystore 文件
+        if: ${{ github.event.inputs.buildType == 'release' }}
+        env:
+          SIGNING_KEY_STORE_PATH: ${{ secrets.SIGNING_KEY_STORE_PATH || './release.keystore' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $SIGNING_KEY_STORE_PATH
+
+      - name: 构建 NativeScript APK
+        id: build
+        env:
+          SIGNING_KEY_STORE_PATH: ${{ secrets.SIGNING_KEY_STORE_PATH || './release.keystore' }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: |
+          # 设置环境变量
+          export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
+
+          # 运行构建脚本
+          ./build.sh ${{ github.event.inputs.buildType || 'debug' }}
+        continue-on-error: false
+
+      - name: 获取版本号并重命名 APK
+        id: rename_apk
+        run: |
+          VERSION=$(cat package.json | grep -E '"version":' | cut -d '"' -f 4)
+          DATE=$(date +"%Y%m%d")
+          BUILD_TYPE=${{ github.event.inputs.buildType == 'release' && 'release' || 'debug' }}
+
+          if [ "$BUILD_TYPE" = "release" ]; then
+            ORIGINAL_APK_NAME="app-release.apk"
+          else
+            ORIGINAL_APK_NAME="app-debug.apk"
+          fi
+
+          NEW_APK_NAME="qyl-nativescript-${VERSION}-${BUILD_TYPE}.apk"
+
+          if [ -f "$ORIGINAL_APK_NAME" ]; then
+            echo "正在重命名文件: $ORIGINAL_APK_NAME -> $NEW_APK_NAME"
+            mv "$ORIGINAL_APK_NAME" "$NEW_APK_NAME"
+            echo "NEW_APK_NAME=$NEW_APK_NAME" >> $GITHUB_ENV
+            echo "new_apk_name=$NEW_APK_NAME" >> $GITHUB_OUTPUT
+          fi
+
+          echo "package_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: 查看构建输出
+        run: |
+          echo "构建产物:"
+          ls -la *.apk 2>/dev/null || echo "未找到构建文件"
+
+          echo "平台目录结构:"
+          find platforms/android -name "*.apk" -o -name "*.aab" 2>/dev/null || echo "平台目录未找到构建文件"
+
+      # 上传 APK 作为 GitHub Actions 工件
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.buildType == 'release' && 'qyl-nativescript-release' || 'qyl-nativescript-debug' }}
+          path: |
+            *.apk
+          retention-days: 30
+
+      # 清理临时文件
+      - name: 清理构建缓存
+        if: always()
+        run: |
+          rm -rf ~/.gradle/caches/build-cache-*
+          rm -rf platforms/android/build/intermediates
